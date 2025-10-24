@@ -19,3 +19,4 @@ sorted = { path = "sorted" }
 
 [workspace.dependencies]
 syn = "2.0.108"
+quote = "1.0.41"
