@@ -16,3 +16,6 @@ derive_builder = { path = "builder" }
 derive_debug = { path = "debug" }
 seq = { path = "seq" }
 sorted = { path = "sorted" }
+
+[workspace.dependencies]
+syn = "2.0.108"
