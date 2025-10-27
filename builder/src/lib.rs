@@ -1,6 +1,9 @@
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, Data, DeriveInput, Fields, Ident, Type, Visibility};
+use syn::{
+    parse_macro_input, Data, DeriveInput, Field, Fields, GenericArgument, Ident, PathArguments,
+    Type, TypePath, Visibility,
+};
 
 #[proc_macro_derive(Builder)]
 pub fn derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
@@ -20,9 +23,82 @@ pub fn derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     output(builder, builder_initializer, builder_impl).into()
 }
 
+#[derive(Debug)]
 struct NamedFieldData {
     name: Ident,
     ty: Type,
+    option_ty: Option<Type>,
+}
+
+impl NamedFieldData {
+    fn inner_ty(&self) -> &Type {
+        self.option_ty.as_ref().unwrap_or(&self.ty)
+    }
+
+    pub fn as_optional_field(&self) -> TokenStream {
+        let name = &self.name;
+        let ty = self.inner_ty();
+        quote! { #name: ::std::option::Option<#ty> }
+    }
+
+    pub fn as_setter_fn(&self) -> TokenStream {
+        let name = &self.name;
+        let ty = self.inner_ty();
+        quote! {
+            pub fn #name(&mut self, #name: #ty) -> &mut Self {
+                self.#name = ::std::option::Option::Some(#name);
+                self
+            }
+        }
+    }
+
+    pub fn as_unwrapped_field(&self) -> TokenStream {
+        let field_name = &self.name;
+        if self.option_ty.is_some() {
+            quote! { #field_name: self.#field_name.clone() }
+        } else {
+            quote! { #field_name: self.#field_name.clone().ok_or("field not set")? }
+        }
+    }
+}
+
+impl From<Field> for NamedFieldData {
+    fn from(field: Field) -> Self {
+        let option_ty = extract_option_ty(&field.ty);
+        Self {
+            name: field.ident.unwrap(),
+            ty: field.ty,
+            option_ty,
+        }
+    }
+}
+
+fn extract_option_ty(ty: &Type) -> Option<Type> {
+    let Type::Path(TypePath { path, .. }) = ty else {
+        return None;
+    };
+
+    if path.segments.len() != 1 {
+        return None;
+    }
+    let first_segment = path.segments.first()?;
+
+    if first_segment.ident != "Option" {
+        return None;
+    }
+
+    let PathArguments::AngleBracketed(path_args) = &first_segment.arguments else {
+        return None;
+    };
+
+    if path_args.args.len() != 1 {
+        return None;
+    }
+    let GenericArgument::Type(inner_ty) = path_args.args.first()? else {
+        return None;
+    };
+
+    Some(inner_ty.clone())
 }
 
 fn extract_named_field_data(data: Data) -> Vec<NamedFieldData> {
@@ -36,10 +112,7 @@ fn extract_named_field_data(data: Data) -> Vec<NamedFieldData> {
     struct_fields
         .named
         .into_iter()
-        .map(|field| NamedFieldData {
-            name: field.ident.unwrap(),
-            ty: field.ty,
-        })
+        .map(NamedFieldData::from)
         .collect()
 }
 
@@ -60,7 +133,7 @@ fn builder(
     builder_name: &Ident,
     struct_fields: &[NamedFieldData],
 ) -> TokenStream {
-    let builder_fields = struct_fields.iter().map(optionalize_field);
+    let builder_fields = struct_fields.iter().map(NamedFieldData::as_optional_field);
 
     quote! {
         #vis struct #builder_name {
@@ -95,7 +168,7 @@ fn builder_impl(
     builder_name: &Ident,
     struct_fields: &[NamedFieldData],
 ) -> TokenStream {
-    let setters = struct_fields.iter().map(setter);
+    let setters = struct_fields.iter().map(NamedFieldData::as_setter_fn);
     let build_fn = build_fn(name, struct_fields);
 
     quote! {
@@ -107,10 +180,7 @@ fn builder_impl(
 }
 
 fn build_fn(name: &Ident, struct_fields: &[NamedFieldData]) -> TokenStream {
-    let fields = struct_fields.iter().map(|field| {
-        let field_name = &field.name;
-        quote! { #field_name: self.#field_name.clone().ok_or("field not set")? }
-    });
+    let fields = struct_fields.iter().map(NamedFieldData::as_unwrapped_field);
 
     quote! {
         pub fn build(&mut self) -> ::std::result::Result<#name, Box<dyn ::std::error::Error>> {
@@ -119,21 +189,4 @@ fn build_fn(name: &Ident, struct_fields: &[NamedFieldData]) -> TokenStream {
             })
         }
     }
-}
-
-fn setter(field: &NamedFieldData) -> TokenStream {
-    let name = &field.name;
-    let ty = &field.ty;
-    quote! {
-        pub fn #name(&mut self, #name: #ty) -> &mut Self {
-            self.#name = ::std::option::Option::Some(#name);
-            self
-        }
-    }
-}
-
-fn optionalize_field(field: &NamedFieldData) -> TokenStream {
-    let name = &field.name;
-    let field_ty = &field.ty;
-    quote! { #name: ::std::option::Option<#field_ty> }
 }
