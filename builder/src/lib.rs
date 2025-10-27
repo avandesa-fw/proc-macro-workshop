@@ -4,16 +4,16 @@ mod util;
 use named_field::NamedFieldData;
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, DeriveInput, Ident, Visibility};
+use syn::parse_macro_input;
 
 #[proc_macro_derive(Builder)]
 pub fn derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input = parse_macro_input!(input as DeriveInput);
+    let input = parse_macro_input!(input as syn::DeriveInput);
 
     let name = input.ident;
     let vis = input.vis;
 
-    let builder_name = Ident::new(&format!("{name}Builder"), name.span());
+    let builder_name = syn::Ident::new(&format!("{name}Builder"), name.span());
 
     let struct_fields = named_field::extract_from_derive_data(input.data);
 
@@ -37,8 +37,8 @@ fn output(
 }
 
 fn builder(
-    vis: &Visibility,
-    builder_name: &Ident,
+    vis: &syn::Visibility,
+    builder_name: &syn::Ident,
     struct_fields: &[NamedFieldData],
 ) -> TokenStream {
     let builder_fields = struct_fields.iter().map(NamedFieldData::as_optional_field);
@@ -51,8 +51,8 @@ fn builder(
 }
 
 fn builder_initializer(
-    name: &Ident,
-    builder_name: &Ident,
+    name: &syn::Ident,
+    builder_name: &syn::Ident,
     struct_fields: &[NamedFieldData],
 ) -> TokenStream {
     let fields = struct_fields.iter().map(|field| {
@@ -72,8 +72,8 @@ fn builder_initializer(
 }
 
 fn builder_impl(
-    name: &Ident,
-    builder_name: &Ident,
+    name: &syn::Ident,
+    builder_name: &syn::Ident,
     struct_fields: &[NamedFieldData],
 ) -> TokenStream {
     let setters = struct_fields.iter().map(NamedFieldData::as_setter_fn);
@@ -87,7 +87,7 @@ fn builder_impl(
     }
 }
 
-fn build_fn(name: &Ident, struct_fields: &[NamedFieldData]) -> TokenStream {
+fn build_fn(name: &syn::Ident, struct_fields: &[NamedFieldData]) -> TokenStream {
     let fields = struct_fields.iter().map(NamedFieldData::as_unwrapped_field);
 
     quote! {
