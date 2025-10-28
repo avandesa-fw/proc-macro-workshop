@@ -1,3 +1,4 @@
+mod check_sorting;
 mod sorted;
 
 use proc_macro::TokenStream;
