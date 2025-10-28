@@ -6,7 +6,7 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::parse_macro_input;
 
-#[proc_macro_derive(Builder)]
+#[proc_macro_derive(Builder, attributes(builder))]
 pub fn derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as syn::DeriveInput);
 
@@ -55,16 +55,15 @@ fn builder_initializer(
     builder_name: &syn::Ident,
     struct_fields: &[NamedFieldData],
 ) -> TokenStream {
-    let fields = struct_fields.iter().map(|field| {
-        let name = &field.name;
-        quote! { #name: ::std::option::Option::None }
-    });
+    let initializers = struct_fields
+        .iter()
+        .map(NamedFieldData::as_field_initializer);
 
     quote! {
         impl #name {
             pub fn builder() -> #builder_name {
                 #builder_name {
-                    #(#fields),*
+                    #(#initializers),*
                 }
             }
         }
