@@ -3,7 +3,7 @@ use proc_macro2::TokenStream;
 use quote::quote;
 
 /// Extract named struct field info from derive input data
-pub fn extract_from_derive_data(data: syn::Data) -> Vec<NamedFieldData> {
+pub fn extract_from_derive_data(data: syn::Data) -> syn::Result<Vec<NamedFieldData>> {
     let syn::Data::Struct(data_struct) = data else {
         panic!("expected struct");
     };
@@ -14,7 +14,7 @@ pub fn extract_from_derive_data(data: syn::Data) -> Vec<NamedFieldData> {
     struct_fields
         .named
         .into_iter()
-        .map(NamedFieldData::from)
+        .map(NamedFieldData::try_from)
         .collect()
 }
 
@@ -132,9 +132,10 @@ impl NamedFieldData {
     }
 }
 
-impl From<syn::Field> for NamedFieldData {
-    fn from(field: syn::Field) -> Self {
-        let kind = if let Some(each_fn_name) = util::extract_each_fn_name(&field.attrs)
+impl TryFrom<syn::Field> for NamedFieldData {
+    type Error = syn::Error;
+    fn try_from(field: syn::Field) -> Result<Self, Self::Error> {
+        let kind = if let Some(each_fn_name) = util::extract_each_fn_name(&field.attrs)?
             && let Some(inner_ty) = util::extract_inner_ty(&field.ty, "Vec")
         {
             NamedFieldKind::VecWithEach(inner_ty, each_fn_name)
@@ -144,10 +145,10 @@ impl From<syn::Field> for NamedFieldData {
             NamedFieldKind::Normal
         };
 
-        Self {
+        Ok(Self {
             name: field.ident.unwrap(),
             ty: field.ty,
             kind,
-        }
+        })
     }
 }

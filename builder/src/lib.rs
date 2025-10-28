@@ -10,18 +10,24 @@ use syn::parse_macro_input;
 pub fn derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as syn::DeriveInput);
 
+    derive_builder(input)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
+fn derive_builder(input: syn::DeriveInput) -> syn::Result<TokenStream> {
     let name = input.ident;
     let vis = input.vis;
 
     let builder_name = syn::Ident::new(&format!("{name}Builder"), name.span());
 
-    let struct_fields = named_field::extract_from_derive_data(input.data);
+    let struct_fields = named_field::extract_from_derive_data(input.data)?;
 
     let builder = builder(&vis, &builder_name, &struct_fields);
     let builder_initializer = builder_initializer(&name, &builder_name, &struct_fields);
     let builder_impl = builder_impl(&name, &builder_name, &struct_fields);
 
-    output(builder, builder_initializer, builder_impl).into()
+    Ok(output(builder, builder_initializer, builder_impl))
 }
 
 fn output(

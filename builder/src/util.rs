@@ -1,5 +1,3 @@
-use syn::LitStr;
-
 /// If the given type is `outer_ty<T>`, returns `T`
 pub fn extract_inner_ty(ty: &syn::Type, outer_ty: &str) -> Option<syn::Type> {
     let syn::Type::Path(syn::TypePath { path, .. }) = ty else {
@@ -29,25 +27,28 @@ pub fn extract_inner_ty(ty: &syn::Type, outer_ty: &str) -> Option<syn::Type> {
     Some(inner_ty.clone())
 }
 
-pub fn extract_each_fn_name(attrs: &[syn::Attribute]) -> Option<syn::Ident> {
-    attrs.into_iter().find_map(|attr| {
+pub fn extract_each_fn_name(attrs: &[syn::Attribute]) -> syn::Result<Option<syn::Ident>> {
+    for attr in attrs.into_iter() {
         if !attr.path().is_ident("builder") {
-            return None;
+            continue;
         }
 
         let mut each_fn_name = None;
         attr.parse_nested_meta(|meta| {
             if !meta.path.is_ident("each") {
-                return Ok(());
+                return Err(meta.error("expected `builder(each = \"...\")`"));
             }
 
-            let lit = meta.value()?.parse::<LitStr>()?;
+            let lit = meta.value()?.parse::<syn::LitStr>()?;
             each_fn_name = Some(syn::Ident::new(&lit.value(), lit.span()));
 
             Ok(())
-        })
-        .ok()?;
+        })?;
 
-        each_fn_name
-    })
+        if each_fn_name.is_some() {
+            return Ok(each_fn_name);
+        }
+    }
+
+    Ok(None)
 }
