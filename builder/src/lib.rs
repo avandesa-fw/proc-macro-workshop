@@ -16,16 +16,16 @@ pub fn derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 }
 
 fn derive_builder(input: syn::DeriveInput) -> syn::Result<TokenStream> {
-    let name = input.ident;
-    let vis = input.vis;
+    let name = &input.ident;
+    let vis = &input.vis;
 
     let builder_name = syn::Ident::new(&format!("{name}Builder"), name.span());
 
-    let struct_fields = named_field::extract_from_derive_data(input.data)?;
+    let struct_fields = named_field::extract_from_derive_input(&input)?;
 
-    let builder = builder(&vis, &builder_name, &struct_fields);
-    let builder_initializer = builder_initializer(&name, &builder_name, &struct_fields);
-    let builder_impl = builder_impl(&name, &builder_name, &struct_fields);
+    let builder = builder(vis, &builder_name, &struct_fields);
+    let builder_initializer = builder_initializer(name, &builder_name, &struct_fields);
+    let builder_impl = builder_impl(name, &builder_name, &struct_fields);
 
     Ok(output(builder, builder_initializer, builder_impl))
 }

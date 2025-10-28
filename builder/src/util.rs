@@ -28,7 +28,7 @@ pub fn extract_inner_ty(ty: &syn::Type, outer_ty: &str) -> Option<syn::Type> {
 }
 
 pub fn extract_each_fn_name(attrs: &[syn::Attribute]) -> syn::Result<Option<syn::Ident>> {
-    for attr in attrs.into_iter() {
+    for attr in attrs {
         if !attr.path().is_ident("builder") {
             continue;
         }

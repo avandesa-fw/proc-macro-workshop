@@ -1,19 +1,23 @@
 use crate::util;
 use proc_macro2::TokenStream;
 use quote::quote;
+use syn::spanned::Spanned;
 
 /// Extract named struct field info from derive input data
-pub fn extract_from_derive_data(data: syn::Data) -> syn::Result<Vec<NamedFieldData>> {
-    let syn::Data::Struct(data_struct) = data else {
-        panic!("expected struct");
+pub fn extract_from_derive_input(input: &syn::DeriveInput) -> syn::Result<Vec<NamedFieldData>> {
+    let syn::Data::Struct(data_struct) = &input.data else {
+        return Err(syn::Error::new(input.ident.span(), "expected struct"));
     };
-    let syn::Fields::Named(struct_fields) = data_struct.fields else {
-        panic!("expected non-tuple struct");
+    let syn::Fields::Named(struct_fields) = &data_struct.fields else {
+        return Err(syn::Error::new(
+            data_struct.fields.span(),
+            "expected non-tuple struct",
+        ));
     };
 
     struct_fields
         .named
-        .into_iter()
+        .iter()
         .map(NamedFieldData::try_from)
         .collect()
 }
@@ -132,9 +136,10 @@ impl NamedFieldData {
     }
 }
 
-impl TryFrom<syn::Field> for NamedFieldData {
+impl TryFrom<&syn::Field> for NamedFieldData {
     type Error = syn::Error;
-    fn try_from(field: syn::Field) -> Result<Self, Self::Error> {
+
+    fn try_from(field: &syn::Field) -> Result<Self, Self::Error> {
         let kind = if let Some(each_fn_name) = util::extract_each_fn_name(&field.attrs)?
             && let Some(inner_ty) = util::extract_inner_ty(&field.ty, "Vec")
         {
@@ -146,8 +151,8 @@ impl TryFrom<syn::Field> for NamedFieldData {
         };
 
         Ok(Self {
-            name: field.ident.unwrap(),
-            ty: field.ty,
+            name: field.ident.clone().unwrap(),
+            ty: field.ty.clone(),
             kind,
         })
     }
