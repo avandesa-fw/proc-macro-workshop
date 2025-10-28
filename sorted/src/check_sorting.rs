@@ -3,15 +3,52 @@ use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::fmt::{Display, Formatter};
 use std::rc::Rc;
+use syn::spanned::Spanned;
+
+pub struct SimplifiedPath<'ast> {
+    pub source: &'ast syn::Path,
+    pub stringified: String,
+}
+
+impl<'ast> TryFrom<&'ast syn::Path> for SimplifiedPath<'ast> {
+    type Error = syn::Error;
+    fn try_from(path: &'ast syn::Path) -> Result<Self, syn::Error> {
+        if path.leading_colon.is_some() {
+            return Err(syn::Error::new(
+                path.leading_colon.span(),
+                "can't sort this",
+            ));
+        }
+        let mut stringified = String::new();
+        for segment in &path.segments {
+            if !matches!(segment.arguments, syn::PathArguments::None) {
+                return Err(syn::Error::new(segment.arguments.span(), "can't sort this"));
+            }
+
+            stringified = if stringified.is_empty() {
+                segment.ident.to_string()
+            } else {
+                format!("{stringified}::{}", segment.ident)
+            };
+        }
+
+        Ok(Self {
+            source: path,
+            stringified,
+        })
+    }
+}
 
 pub enum Sortable<'ast> {
     Ident(&'ast syn::Ident),
+    Path(SimplifiedPath<'ast>),
 }
 
 impl Sortable<'_> {
     pub fn span(&self) -> Span {
         match self {
             Sortable::Ident(ident) => ident.span(),
+            Sortable::Path(path) => path.source.span(),
         }
     }
 }
@@ -20,6 +57,8 @@ impl PartialEq for Sortable<'_> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Ident(a), Self::Ident(b)) => a.eq(b),
+            (Self::Path(a), Self::Path(b)) => a.stringified.eq(&b.stringified),
+            _ => false,
         }
     }
 }
@@ -28,6 +67,13 @@ impl PartialOrd for Sortable<'_> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match (self, other) {
             (Self::Ident(a), Self::Ident(b)) => a.partial_cmp(b),
+            (Self::Path(a), Self::Path(b)) => a.stringified.partial_cmp(&b.stringified),
+            (Self::Ident(ident), Self::Path(path)) => {
+                ident.to_string().partial_cmp(&path.stringified)
+            }
+            (Self::Path(path), Self::Ident(ident)) => {
+                path.stringified.partial_cmp(&ident.to_string())
+            }
         }
     }
 }
@@ -36,6 +82,7 @@ impl Display for Sortable<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Ident(ident) => ident.fmt(f),
+            Sortable::Path(path) => path.stringified.fmt(f),
         }
     }
 }
@@ -45,13 +92,14 @@ pub fn check_sorting<'ast>(
 ) -> Option<TokenStream> {
     // initialize a map of each variant to the variant it should be sorted before
     // we'll populate it below, but each variant starts with `None`
-    let map: Vec<(Rc<Sortable>, RefCell<Option<Rc<Sortable>>>)> = idents
+    // Vec<(Rc<Sortable>, RefCell<Option<Rc<Sortable>>>)>
+    let map = idents
         .into_iter()
         .map(|sortable| {
             let sortable = Rc::new(sortable);
             (sortable, RefCell::new(None))
         })
-        .collect();
+        .collect::<Vec<_>>();
 
     // O(n^2) but who cares
     for (i, (a, _)) in map.iter().enumerate() {
@@ -63,7 +111,7 @@ pub fn check_sorting<'ast>(
                 if goes_before.is_none()
                     || goes_before
                         .as_ref()
-                        .is_some_and(|b_goes_before| a < &b_goes_before)
+                        .is_some_and(|goes_before| a < goes_before)
                 {
                     *goes_before = Some(Rc::clone(a));
                 }

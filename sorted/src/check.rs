@@ -1,4 +1,4 @@
-use crate::check_sorting::{check_sorting, Sortable};
+use crate::check_sorting::{check_sorting, SimplifiedPath, Sortable};
 use proc_macro2::{Span, TokenStream};
 use quote::ToTokens;
 use syn::spanned::Spanned;
@@ -15,23 +15,32 @@ impl VisitMut for CheckSortedMatch {
     fn visit_expr_match_mut(&mut self, node: &mut ExprMatch) {
         // remove `#[sorted]` attributes, if present
         // todo: emit error for malformed attribute
-        let _ = node
+        let sorted_attrs = node
             .attrs
             .extract_if(.., |attr| attr.path().is_ident("sorted"))
             .map(|_| ())
-            .collect::<()>();
+            .count();
+        if sorted_attrs == 0 {
+            return;
+        }
 
         let idents = match node
             .arms
             .iter()
             .map(|arm| {
-                let ident = match &arm.pat {
-                    syn::Pat::Path(pat_path) => pat_path.path.require_ident()?,
-                    syn::Pat::Struct(pat_struct) => pat_struct.path.require_ident()?,
-                    syn::Pat::TupleStruct(tuple_struct) => tuple_struct.path.require_ident()?,
+                let sortable = match &arm.pat {
+                    syn::Pat::Path(pat_path) => {
+                        Sortable::Path(SimplifiedPath::try_from(&pat_path.path)?)
+                    }
+                    syn::Pat::Struct(pat_struct) => {
+                        Sortable::Path(SimplifiedPath::try_from(&pat_struct.path)?)
+                    }
+                    syn::Pat::TupleStruct(tuple_struct) => {
+                        Sortable::Path(SimplifiedPath::try_from(&tuple_struct.path)?)
+                    }
                     _ => return Err(syn::Error::new(arm.pat.span(), "can't sort this")),
                 };
-                Ok(Sortable::Ident(ident))
+                Ok(sortable)
             })
             .collect::<Result<Vec<Sortable>, _>>()
         {
