@@ -16,13 +16,16 @@ impl<'ast> TryFrom<&'ast syn::Path> for SimplifiedPath<'ast> {
         if path.leading_colon.is_some() {
             return Err(syn::Error::new(
                 path.leading_colon.span(),
-                "can't sort this",
+                "unsupported by #[sorted]",
             ));
         }
         let mut stringified = String::new();
         for segment in &path.segments {
             if !matches!(segment.arguments, syn::PathArguments::None) {
-                return Err(syn::Error::new(segment.arguments.span(), "can't sort this"));
+                return Err(syn::Error::new(
+                    segment.arguments.span(),
+                    "unsupported by #[sorted]",
+                ));
             }
 
             stringified = if stringified.is_empty() {

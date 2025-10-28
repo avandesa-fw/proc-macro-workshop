@@ -38,7 +38,7 @@ impl VisitMut for CheckSortedMatch {
                     syn::Pat::TupleStruct(tuple_struct) => {
                         Sortable::Path(SimplifiedPath::try_from(&tuple_struct.path)?)
                     }
-                    _ => return Err(syn::Error::new(arm.pat.span(), "can't sort this")),
+                    _ => return Err(syn::Error::new(arm.pat.span(), "unsupported by #[sorted]")),
                 };
                 Ok(sortable)
             })
