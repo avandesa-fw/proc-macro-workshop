@@ -1,4 +1,4 @@
-use crate::check_sorting::check_sorting;
+use crate::check_sorting::{check_sorting, Sortable};
 use proc_macro2::{Span, TokenStream};
 use quote::ToTokens;
 use syn::spanned::Spanned;
@@ -24,12 +24,16 @@ impl VisitMut for CheckSortedMatch {
         let idents = match node
             .arms
             .iter()
-            .map(|arm| match &arm.pat {
-                syn::Pat::Struct(pat_struct) => pat_struct.path.require_ident(),
-                syn::Pat::TupleStruct(tuple_struct) => tuple_struct.path.require_ident(),
-                _ => Err(syn::Error::new(arm.pat.span(), "can't sort this")),
+            .map(|arm| {
+                let ident = match &arm.pat {
+                    syn::Pat::Path(pat_path) => pat_path.path.require_ident()?,
+                    syn::Pat::Struct(pat_struct) => pat_struct.path.require_ident()?,
+                    syn::Pat::TupleStruct(tuple_struct) => tuple_struct.path.require_ident()?,
+                    _ => return Err(syn::Error::new(arm.pat.span(), "can't sort this")),
+                };
+                Ok(Sortable::Ident(ident))
             })
-            .collect::<Result<Vec<_>, _>>()
+            .collect::<Result<Vec<Sortable>, _>>()
         {
             Ok(idents) => idents,
             Err(e) => {
