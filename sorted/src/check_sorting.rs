@@ -45,6 +45,7 @@ impl<'ast> TryFrom<&'ast syn::Path> for SimplifiedPath<'ast> {
 pub enum Sortable<'ast> {
     Ident(&'ast syn::Ident),
     Path(SimplifiedPath<'ast>),
+    Wildcard(&'ast syn::Token![_]),
 }
 
 impl Sortable<'_> {
@@ -52,6 +53,7 @@ impl Sortable<'_> {
         match self {
             Sortable::Ident(ident) => ident.span(),
             Sortable::Path(path) => path.source.span(),
+            Sortable::Wildcard(wildcard) => wildcard.span,
         }
     }
 }
@@ -61,6 +63,7 @@ impl PartialEq for Sortable<'_> {
         match (self, other) {
             (Self::Ident(a), Self::Ident(b)) => a.eq(b),
             (Self::Path(a), Self::Path(b)) => a.stringified.eq(&b.stringified),
+            (Self::Wildcard(_), Self::Wildcard(_)) => true,
             _ => false,
         }
     }
@@ -77,6 +80,9 @@ impl PartialOrd for Sortable<'_> {
             (Self::Path(path), Self::Ident(ident)) => {
                 path.stringified.partial_cmp(&ident.to_string())
             }
+            (Self::Wildcard(_), Self::Wildcard(_)) => Some(Ordering::Equal),
+            (Self::Wildcard(_), _) => Some(Ordering::Greater),
+            (_, Self::Wildcard(_)) => Some(Ordering::Less),
         }
     }
 }
@@ -86,6 +92,7 @@ impl Display for Sortable<'_> {
         match self {
             Self::Ident(ident) => ident.fmt(f),
             Sortable::Path(path) => path.stringified.fmt(f),
+            Sortable::Wildcard(_) => "wildcard".fmt(f),
         }
     }
 }

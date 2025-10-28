@@ -29,6 +29,7 @@ impl VisitMut for CheckSortedMatch {
             .iter()
             .map(|arm| {
                 let sortable = match &arm.pat {
+                    syn::Pat::Ident(pat_ident) => Sortable::Ident(&pat_ident.ident),
                     syn::Pat::Path(pat_path) => {
                         Sortable::Path(SimplifiedPath::try_from(&pat_path.path)?)
                     }
@@ -38,6 +39,7 @@ impl VisitMut for CheckSortedMatch {
                     syn::Pat::TupleStruct(tuple_struct) => {
                         Sortable::Path(SimplifiedPath::try_from(&tuple_struct.path)?)
                     }
+                    syn::Pat::Wild(pat_wild) => Sortable::Wildcard(&pat_wild.underscore_token),
                     _ => return Err(syn::Error::new(arm.pat.span(), "unsupported by #[sorted]")),
                 };
                 Ok(sortable)
